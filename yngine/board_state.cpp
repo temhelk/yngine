@@ -32,7 +32,7 @@ void BoardState::generate_moves(MoveList& move_list) const {
         this->generate_ring_removal(move_list);
     } break;
     case NextAction::Done: {
-        assert(false);
+        abort();
     } break;
     }
 

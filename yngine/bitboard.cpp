@@ -207,7 +207,7 @@ uint8_t Bitboard::index_move_direction(uint8_t index, Direction direction, uint8
     case Direction::S:
         return index - 10 * times;
     default:
-        assert(false);
+        abort();
     }
 }
 

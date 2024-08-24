@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <utility>
 
 namespace Yngine {
@@ -54,7 +55,7 @@ inline Direction opposite(Direction direction) {
     case Direction::S:
         return Direction::N;
     default:
-        assert(false);
+        abort();
     }
 }
 
@@ -79,7 +80,7 @@ inline bool do_bits_increase_in_direction(Direction dir) {
         return false;
 
     default:
-        assert(false);
+        abort();
     }
 }
 
