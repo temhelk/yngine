@@ -15,3 +15,10 @@ endif()
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+# Dependencies
+add_library(Xoshiro-cpp INTERFACE)
+target_include_directories(Xoshiro-cpp INTERFACE extern/Xoshiro-cpp)
+
+target_link_libraries(Yngine PUBLIC Xoshiro-cpp)
+

@@ -2,6 +2,7 @@
 #include <yngine/tables.hpp>
 
 #include <cassert>
+#include <random>
 
 namespace Yngine {
 
@@ -146,7 +147,24 @@ void BoardState::apply_move(Move move) {
                 this->next_action = NextAction::RingMovement;
             }
         },
+        [this](PassMove move) {
+            this->last_ring_move_color = opposite(this->last_ring_move_color);
+        },
     }, move);
+}
+
+void BoardState::playout(XoshiroCpp::Xoshiro256StarStar& prng) {
+    MoveList move_list;
+    while (this->next_action != NextAction::Done) {
+        this->generate_moves(move_list);
+
+        std::uniform_int_distribution<size_t> dist{0, move_list.get_size() - 1};
+        const auto move = move_list[dist(prng)];
+
+        this->apply_move(move);
+
+        move_list.reset();
+    }
 }
 
 NextAction BoardState::get_next_action() const {
@@ -163,7 +181,7 @@ GameResult BoardState::game_result() const {
         return GameResult::Draw;
     }
 
-    if (white_ring_count > black_ring_count) {
+    if (white_ring_count < black_ring_count) {
         return GameResult::WhiteWon;
     } else {
         return GameResult::BlackWon;
@@ -242,6 +260,10 @@ void BoardState::generate_ring_moves(MoveList& move_list) const {
                 move_list.append(RingMove{ring_index, move_index, direction});
             }
         }
+    }
+
+    if (move_list.get_size() == 0) {
+        move_list.append(PassMove{});
     }
 }
 

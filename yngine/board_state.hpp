@@ -4,6 +4,8 @@
 #include <yngine/bitboard.hpp>
 #include <yngine/moves.hpp>
 
+#include <XoshiroCpp.hpp>
+
 #include <optional>
 
 namespace Yngine {
@@ -20,8 +22,11 @@ class BoardState {
 public:
     BoardState();
 
+    // MoveList should be empty before calling this function
     void generate_moves(MoveList& move_list) const;
     void apply_move(Move move);
+
+    void playout(XoshiroCpp::Xoshiro256StarStar& prng);
 
     NextAction get_next_action() const;
     GameResult game_result() const;
