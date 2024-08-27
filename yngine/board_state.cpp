@@ -188,6 +188,21 @@ GameResult BoardState::game_result() const {
     }
 }
 
+Color BoardState::whose_move() const {
+    switch (this->next_action) {
+    case NextAction::RingPlacement:
+    case NextAction::RingMovement:
+    case NextAction::Done: {
+        return opposite(this->last_ring_move_color);
+    } break;
+
+    case NextAction::RowRemoval:
+    case NextAction::RingRemoval: {
+        return this->ring_and_row_removal_color;
+    } break;
+    }
+}
+
 void BoardState::generate_ring_placement_moves(MoveList& move_list) const {
     Bitboard occupancy = this->white_rings | this->black_rings;
     Bitboard empty_nodes = ~occupancy & Bitboard::get_game_board();

@@ -30,6 +30,7 @@ public:
 
     NextAction get_next_action() const;
     GameResult game_result() const;
+    Color whose_move() const;
 
     friend std::ostream& operator<<(std::ostream& out, BoardState board_state);
 

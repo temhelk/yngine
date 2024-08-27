@@ -20,6 +20,9 @@ add_library(
     bitboard.cpp bitboard.hpp
     moves.cpp moves.hpp
     board_state.cpp board_state.hpp
+    mcts.cpp mcts.hpp
+    allocators.cpp allocators.hpp
+    common.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tables.hpp
 )
 
