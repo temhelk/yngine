@@ -25,6 +25,7 @@ public:
     // MoveList should be empty before calling this function
     void generate_moves(MoveList& move_list) const;
     void apply_move(Move move);
+    BoardState with_move(Move move) const;
 
     void playout(XoshiroCpp::Xoshiro256StarStar& prng);
 

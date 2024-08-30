@@ -3,6 +3,7 @@
 #include <limits>
 #include <numbers>
 #include <cmath>
+#include <random>
 #include <iostream>
 
 namespace Yngine {
@@ -12,14 +13,20 @@ float MCTSNode::compute_uct() const {
         return std::numeric_limits<float>::infinity();
     }
 
+    // @TODO: find the best value for this, or maybe let users change it
+    // with it being 100 we won without letting our opponent complete any rows
+    // while otherwise we usually win with one ring difference
     const float exploration_parameter = std::numbers::sqrt2_v<float>;
 
-    const float exploitation = static_cast<float>(this->wins) / this->simulations;
+    const float exploitation =
+        (static_cast<float>(this->half_wins) / 2) /
+        static_cast<float>(this->simulations);
+
     const float exploration =
         exploration_parameter *
         std::sqrt(
             std::log(static_cast<float>(this->parent->simulations)) /
-            this->simulations
+            static_cast<float>(this->simulations)
         );
 
     return exploitation + exploration;
@@ -28,6 +35,8 @@ float MCTSNode::compute_uct() const {
 // @TODO: don't hardcode the arena capacity
 MCTS::MCTS()
     : arena{17'179'869'184} {
+    std::random_device rd;
+    this->xoshiro = XoshiroCpp::Xoshiro256StarStar((static_cast<uint64_t>(rd()) << 32) | rd());
 }
 
 Move MCTS::search(int iter_num) {
@@ -44,6 +53,9 @@ Move MCTS::search(int iter_num) {
 
             MCTSNode* current_child = current->first_child;
             while (current_child->next_sibling) {
+                if (std::isinf(greatest_uct))
+                    break;
+
                 current_child = current_child->next_sibling;
 
                 const auto current_uct = current_child->compute_uct();
@@ -64,12 +76,19 @@ Move MCTS::search(int iter_num) {
                 MoveList move_list;
                 current->board_state.generate_moves(move_list);
 
-                MCTSNode* last_child = nullptr;
-                for (int move_index = 0; move_index < move_list.get_size(); move_index++) {
+                const auto new_first_child = this->arena.allocate<MCTSNode>(MCTSNode{
+                    .board_state = current->board_state.with_move(move_list[0]),
+                    .parent_move = move_list[0],
+
+                    .parent = current,
+                });
+                current->first_child = new_first_child;
+
+                MCTSNode* last_child = new_first_child;
+                for (int move_index = 1; move_index < move_list.get_size(); move_index++) {
                     const auto move = move_list[move_index];
 
-                    auto new_board_state = current->board_state;
-                    new_board_state.apply_move(move);
+                    auto new_board_state = current->board_state.with_move(move);
 
                     const auto new_child = this->arena.allocate<MCTSNode>(MCTSNode{
                         .board_state = new_board_state,
@@ -78,23 +97,15 @@ Move MCTS::search(int iter_num) {
                         .parent = current,
                     });
 
-                    if (move_index == 0) {
-                        current->first_child = new_child;
-                    }
-
-                    if (last_child) {
-                        last_child->next_sibling = new_child;
-                        last_child = new_child;
-                    } else {
-                        last_child = new_child;
-                    }
+                    last_child->next_sibling = new_child;
+                    last_child = new_child;
                 }
 
-                auto child_board_state = current->first_child->board_state;
-                child_board_state.playout(this->xoshiro);
+                auto first_child_board_state = current->first_child->board_state;
+                first_child_board_state.playout(this->xoshiro);
 
                 // Simulation phase
-                playout_result = child_board_state.game_result();
+                playout_result = first_child_board_state.game_result();
                 backpropagate_from = current->first_child;
             } else {
                 playout_result = current->board_state.game_result();
@@ -119,13 +130,13 @@ Move MCTS::search(int iter_num) {
             propagation_current->simulations++;
 
             if (playout_result == GameResult::Draw) {
-                propagation_current->wins += 0.5f;
+                propagation_current->half_wins += 1;
             } else {
                 const auto node_color = propagation_current->parent->board_state.whose_move();
 
                 if ( we_won && node_color == our_color ||
                     !we_won && node_color != our_color) {
-                    propagation_current->wins++;
+                    propagation_current->half_wins += 2;
                 }
             }
 
@@ -134,7 +145,7 @@ Move MCTS::search(int iter_num) {
 
         this->root->simulations++;
         if (!we_won) {
-            this->root->wins++;
+            this->root->half_wins += 2;
         }
     }
 
@@ -156,14 +167,16 @@ Move MCTS::search(int iter_num) {
         child = child->next_sibling;
     }
 
+    const auto best_move = most_simulations_node->parent_move;
+
     std::cout << "DEBUG: win rate = "
-        << (most_simulations_node->wins / most_simulations_node->simulations)
-        << ", sims = " << most_simulations_node->simulations << std::endl;
+        << ((float)most_simulations_node->half_wins / 2 / most_simulations_node->simulations)
+        << ", move confidence = " << ((float)most_simulations_node->simulations / iter_num) << std::endl;
 
     this->root = nullptr;
     this->arena.clear();
 
-    return most_simulations_node->parent_move;
+    return best_move;
 }
 
 void MCTS::apply_move(Move move) {

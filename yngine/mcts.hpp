@@ -9,7 +9,7 @@
 namespace Yngine {
 
 struct MCTSNode {
-    float wins = 0; // @TODO: can we use int but count half-wins?
+    int half_wins = 0;
     int simulations = 0;
 
     BoardState board_state;

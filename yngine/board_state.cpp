@@ -153,6 +153,12 @@ void BoardState::apply_move(Move move) {
     }, move);
 }
 
+BoardState BoardState::with_move(Move move) const {
+    auto board_copy = *this;
+    board_copy.apply_move(move);
+    return board_copy;
+}
+
 void BoardState::playout(XoshiroCpp::Xoshiro256StarStar& prng) {
     MoveList move_list;
     while (this->next_action != NextAction::Done) {
