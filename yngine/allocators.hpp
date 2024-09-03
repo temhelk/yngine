@@ -24,6 +24,10 @@ public:
     uint8_t* allocate_bytes(std::size_t bytes);
     void clear();
 
+    std::size_t used_bytes() const;
+    std::size_t capacity_bytes() const;
+    std::size_t left_bytes() const;
+
     // Returns the memory for the object without initialization
     template<typename T>
     T* allocate_raw() {
@@ -37,6 +41,7 @@ public:
     T* allocate(Args&&... args) {
         static_assert(std::is_trivially_destructible_v<T>);
 
+        // @TODO: handle nullptr here (memory limit)
         void* ptr = this->allocate_bytes(sizeof(T));
         T* result = new (ptr) T(std::forward<Args>(args)...);
 

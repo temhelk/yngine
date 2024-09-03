@@ -5,6 +5,7 @@
 #include <cmath>
 #include <random>
 #include <iostream>
+#include <chrono>
 
 namespace Yngine {
 
@@ -32,19 +33,39 @@ float MCTSNode::compute_uct() const {
     return exploitation + exploration;
 }
 
-// @TODO: don't hardcode the arena capacity
-MCTS::MCTS()
-    : arena{17'179'869'184} {
+MCTS::MCTS(std::size_t memory_limit_bytes)
+    : arena{memory_limit_bytes} {
     std::random_device rd;
     this->xoshiro = XoshiroCpp::Xoshiro256StarStar((static_cast<uint64_t>(rd()) << 32) | rd());
 }
 
-Move MCTS::search(int iter_num) {
+MCTS::~MCTS() {
+    this->stop_search = true;
+    this->search_thread.join();
+}
+
+std::future<Move> MCTS::search(float seconds) {
+    std::packaged_task<Move(MCTS*, SearchLimit)> task{&MCTS::search_threaded};
+    auto future = task.get_future();
+
+    this->search_thread = std::thread{std::move(task), this, seconds};
+
+    return std::move(future);
+}
+
+Move MCTS::search_threaded(SearchLimit limit) {
     this->root = this->arena.allocate<MCTSNode>(
         MCTSNode{ .board_state = this->board_state }
     );
 
-    for (int iter = 0; iter < iter_num; iter++) {
+    if (!this->root) {
+        abort();
+    }
+
+    const auto start_time = std::chrono::steady_clock::now();
+
+    int iter = 0;
+    while (!this->stop_search) {
         // Selection phase
         MCTSNode* current = this->root;
         while (current->first_child) {
@@ -75,6 +96,12 @@ Move MCTS::search(int iter_num) {
                 // Expansion phase
                 MoveList move_list;
                 current->board_state.generate_moves(move_list);
+
+                // Check if we can allocate enough nodes, and if we can't
+                // stop iteration and return the most promising moves as of now
+                if (this->arena.left_bytes() < sizeof(MCTSNode) * move_list.get_size()) {
+                    break;
+                }
 
                 const auto new_first_child = this->arena.allocate<MCTSNode>(MCTSNode{
                     .board_state = current->board_state.with_move(move_list[0]),
@@ -147,10 +174,30 @@ Move MCTS::search(int iter_num) {
         if (!we_won) {
             this->root->half_wins += 2;
         }
+
+        iter++;
+
+        if (auto* limit_iters = std::get_if<int>(&limit)) {
+            if (iter >= *limit_iters) {
+                break;
+            }
+        } else if (auto* limit_seconds = std::get_if<float>(&limit)) {
+            const auto elapsed = std::chrono::steady_clock::now() - start_time;
+            const auto elapsed_seconds = std::chrono::duration<float>(elapsed).count();
+
+            if (elapsed_seconds >= *limit_seconds) {
+                break;
+            }
+        } else {
+            assert(false);
+        }
     }
 
-    // @TODO: make sure we made at least one iteration / or handle nullptr for most sims node
-    // Find the most visited node
+    if (!this->root->first_child) {
+        // @TODO: handle the case when we haven't performed any iterations
+        abort();
+    }
+
     int most_simulations = -1;
     MCTSNode* most_simulations_node = nullptr;
 
@@ -171,7 +218,9 @@ Move MCTS::search(int iter_num) {
 
     std::cout << "DEBUG: win rate = "
         << ((float)most_simulations_node->half_wins / 2 / most_simulations_node->simulations)
-        << ", move confidence = " << ((float)most_simulations_node->simulations / iter_num) << std::endl;
+        << ", move confidence = " << ((float)most_simulations_node->simulations / iter) << std::endl;
+
+    std::cout << "DEBUG: iters = " << iter << ", memory used (bytes) = " << this->arena.used_bytes() << std::endl;
 
     this->root = nullptr;
     this->arena.clear();

@@ -6,6 +6,8 @@
 
 #include <XoshiroCpp.hpp>
 
+#include <future>
+
 namespace Yngine {
 
 struct MCTSNode {
@@ -24,23 +26,33 @@ struct MCTSNode {
 
 class MCTS {
 public:
-    MCTS();
+    // Int limit is the amount of iterations to perform
+    // Float limit is the amount of seconds to search for
+    using SearchLimit = std::variant<int, float>;
+
+    MCTS(std::size_t memory_limit_bytes);
+    ~MCTS();
+
     MCTS(const MCTS &) = delete;
     MCTS(MCTS &&) = delete;
     MCTS &operator=(const MCTS &) = delete;
     MCTS &operator=(MCTS &&) = delete;
 
-    Move search(int iter_num);
+    std::future<Move> search(float seconds);
     void apply_move(Move move);
 
 private:
-    // @TODO: seed it properly
+    Move search_threaded(SearchLimit limit);
+
     XoshiroCpp::Xoshiro256StarStar xoshiro;
 
     BoardState board_state;
 
     ArenaAllocator arena;
     MCTSNode* root = nullptr;
+
+    std::atomic<bool> stop_search;
+    std::thread search_thread;
 };
 
 }

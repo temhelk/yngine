@@ -6,7 +6,9 @@
 
 namespace Yngine {
 
-ArenaAllocator::ArenaAllocator(std::size_t capacity) : capacity{capacity} {
+ArenaAllocator::ArenaAllocator(std::size_t capacity)
+    : capacity{capacity}
+    , used{0} {
     const auto data = mmap(
         nullptr,
         capacity,
@@ -42,6 +44,18 @@ uint8_t* ArenaAllocator::allocate_bytes(std::size_t bytes) {
 
 void ArenaAllocator::clear() {
     this->used = 0;
+}
+
+std::size_t ArenaAllocator::used_bytes() const {
+    return this->used;
+}
+
+std::size_t ArenaAllocator::capacity_bytes() const {
+    return this->capacity;
+}
+
+std::size_t ArenaAllocator::left_bytes() const {
+    return this->capacity - this->used;
 }
 
 }
