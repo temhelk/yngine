@@ -3,7 +3,6 @@
 
 // @TODO: add a pool allocator?
 // @TODO: write a Windows version
-// @TODO: memory usage tracking
 
 #include <cstdint>
 #include <type_traits>
@@ -41,8 +40,11 @@ public:
     T* allocate(Args&&... args) {
         static_assert(std::is_trivially_destructible_v<T>);
 
-        // @TODO: handle nullptr here (memory limit)
         void* ptr = this->allocate_bytes(sizeof(T));
+        if (!ptr) {
+            return nullptr;
+        }
+
         T* result = new (ptr) T(std::forward<Args>(args)...);
 
         return result;
