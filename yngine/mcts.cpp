@@ -48,6 +48,9 @@ std::future<Move> MCTS::search(float seconds) {
     std::packaged_task<Move(MCTS*, SearchLimit)> task{&MCTS::search_threaded};
     auto future = task.get_future();
 
+    if (this->search_thread.joinable()) {
+        this->search_thread.join();
+    }
     this->search_thread = std::thread{std::move(task), this, seconds};
 
     return std::move(future);
@@ -220,7 +223,7 @@ Move MCTS::search_threaded(SearchLimit limit) {
         << ((float)most_simulations_node->half_wins / 2 / most_simulations_node->simulations)
         << ", move confidence = " << ((float)most_simulations_node->simulations / iter) << std::endl;
 
-    std::cout << "DEBUG: iters = " << iter << ", memory used (bytes) = " << this->arena.used_bytes() << std::endl;
+    std::cout << "DEBUG: iters = " << iter << ", memory used (MB) = " << (this->arena.used_bytes() / 1024 / 1024) << std::endl;
 
     this->root = nullptr;
     this->arena.clear();
