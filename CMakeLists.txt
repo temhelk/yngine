@@ -6,6 +6,8 @@ project(
     LANGUAGES CXX C
 )
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_subdirectory(yngine)
 
 if(CMAKE_PROJECT_NAME STREQUAL Yngine)

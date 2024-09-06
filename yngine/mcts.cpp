@@ -14,9 +14,6 @@ float MCTSNode::compute_uct() const {
         return std::numeric_limits<float>::infinity();
     }
 
-    // @TODO: find the best value for this, or maybe let users change it
-    // with it being 100 we won without letting our opponent complete any rows
-    // while otherwise we usually win with one ring difference
     const float exploration_parameter = std::numbers::sqrt2_v<float>;
 
     const float exploitation =
@@ -197,7 +194,7 @@ Move MCTS::search_threaded(SearchLimit limit) {
     }
 
     if (!this->root->first_child) {
-        // @TODO: handle the case when we haven't performed any iterations
+        std::cerr << "No iterations were performed for some reason, exiting..." << std::endl;
         abort();
     }
 
@@ -219,11 +216,11 @@ Move MCTS::search_threaded(SearchLimit limit) {
 
     const auto best_move = most_simulations_node->parent_move;
 
-    std::cout << "DEBUG: win rate = "
+    std::cerr << "DEBUG: win rate = "
         << ((float)most_simulations_node->half_wins / 2 / most_simulations_node->simulations)
         << ", move confidence = " << ((float)most_simulations_node->simulations / iter) << std::endl;
 
-    std::cout << "DEBUG: iters = " << iter << ", memory used (MB) = " << (this->arena.used_bytes() / 1024 / 1024) << std::endl;
+    std::cerr << "DEBUG: iters = " << iter << ", memory used (MB) = " << (this->arena.used_bytes() / 1024 / 1024) << std::endl;
 
     this->root = nullptr;
     this->arena.clear();
@@ -233,6 +230,19 @@ Move MCTS::search_threaded(SearchLimit limit) {
 
 void MCTS::apply_move(Move move) {
     this->board_state.apply_move(move);
+}
+
+void MCTS::set_board(BoardState board) {
+    this->board_state = board;
+}
+
+BoardState MCTS::get_board() const {
+    return this->board_state;
+}
+
+void MCTS::reseed() {
+    std::random_device rd;
+    this->xoshiro = XoshiroCpp::Xoshiro256StarStar((static_cast<uint64_t>(rd()) << 32) | rd());
 }
 
 }

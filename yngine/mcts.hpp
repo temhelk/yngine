@@ -40,6 +40,9 @@ public:
 
     std::future<Move> search(float seconds);
     void apply_move(Move move);
+    void set_board(BoardState board);
+    BoardState get_board() const;
+    void reseed();
 
 private:
     Move search_threaded(SearchLimit limit);
