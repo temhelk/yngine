@@ -2,13 +2,18 @@
 
 #include <iostream>
 
+#if defined(__linux__)
 #include <sys/mman.h>
+#elif defined(_WIN32)
+#include <Windows.h>
+#endif
 
 namespace Yngine {
 
 ArenaAllocator::ArenaAllocator(std::size_t capacity)
     : capacity{capacity}
     , used{0} {
+#if defined(__linux__)
     const auto data = mmap(
         nullptr,
         capacity,
@@ -22,12 +27,29 @@ ArenaAllocator::ArenaAllocator(std::size_t capacity)
         std::cerr << "Failed to allocate an arena using mmap" << std::endl;
         std::abort();
     }
+#elif defined(_WIN32)
+    const auto data = VirtualAlloc(
+        nullptr,
+        capacity,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_READWRITE
+    );
+
+    if (data == nullptr) {
+        std::cerr << "Failed to allocate an arena using VirtualAlloc" << std::endl;
+        std::abort();
+    }
+#endif
 
     this->data = static_cast<uint8_t*>(data);
 }
 
 ArenaAllocator::~ArenaAllocator() {
+#if defined(__linux__)
     munmap(this->data, this->capacity);
+#elif defined(_WIN32)
+    VirtualFree(this->data, 0, MEM_RELEASE);
+#endif
 }
 
 
