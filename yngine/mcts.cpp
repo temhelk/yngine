@@ -97,6 +97,9 @@ Move MCTS::search_threaded(SearchLimit limit) {
                 MoveList move_list;
                 current->board_state.generate_moves(move_list);
 
+                // Shuffle move list to remove biases
+                std::shuffle(&move_list[0], &move_list[move_list.get_size()], this->xoshiro);
+
                 // Check if we can allocate enough nodes, and if we can't
                 // stop iteration and return the most promising moves as of now
                 if (this->arena.left_bytes() < sizeof(MCTSNode) * move_list.get_size()) {

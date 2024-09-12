@@ -50,7 +50,7 @@ public:
     void append(Move move);
     void reset();
 
-    Move operator[](std::size_t index) const;
+    Move& operator[](std::size_t index);
 
 private:
     std::size_t size = 0;
