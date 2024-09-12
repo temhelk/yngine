@@ -14,7 +14,6 @@ void MoveList::append(Move move) {
 }
 
 Move& MoveList::operator[](std::size_t index) {
-    assert(index < this->size && index < MOVE_LIST_NUMBER);
     return this->moves[index];
 }
 

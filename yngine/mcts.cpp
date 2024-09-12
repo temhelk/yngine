@@ -91,7 +91,7 @@ Move MCTS::search_threaded(SearchLimit limit) {
 
         GameResult playout_result;
         MCTSNode* backpropagate_from;
-        if (current->simulations != 0) {
+        if (current->simulations != 0 || current == root) {
             if (current->board_state.get_next_action() != NextAction::Done) {
                 // Expansion phase
                 MoveList move_list;
@@ -150,11 +150,6 @@ Move MCTS::search_threaded(SearchLimit limit) {
         }
 
         // Backpropagation
-        const auto our_color = this->board_state.whose_move();
-        const auto we_won =
-            playout_result == GameResult::WhiteWon && our_color == Color::White ||
-            playout_result == GameResult::BlackWon && our_color == Color::Black;
-
         auto propagation_current = backpropagate_from;
         while (propagation_current->parent) {
             propagation_current->simulations++;
@@ -164,8 +159,8 @@ Move MCTS::search_threaded(SearchLimit limit) {
             } else {
                 const auto node_color = propagation_current->parent->board_state.whose_move();
 
-                if ( we_won && node_color == our_color ||
-                    !we_won && node_color != our_color) {
+                if (playout_result == GameResult::WhiteWon && node_color == Color::White ||
+                    playout_result == GameResult::BlackWon && node_color == Color::Black) {
                     propagation_current->half_wins += 2;
                 }
             }
@@ -173,12 +168,8 @@ Move MCTS::search_threaded(SearchLimit limit) {
             propagation_current = propagation_current->parent;
         }
 
-        this->root->simulations++;
-        if (playout_result == GameResult::Draw) {
-            this->root->half_wins += 1;
-        } else if (!we_won) {
-            this->root->half_wins += 2;
-        }
+        // We don't have to track wins of the root node, only simulations
+        root->simulations++;
 
         iter++;
 
