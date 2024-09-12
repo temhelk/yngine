@@ -171,7 +171,9 @@ Move MCTS::search_threaded(SearchLimit limit) {
         }
 
         this->root->simulations++;
-        if (!we_won) {
+        if (playout_result == GameResult::Draw) {
+            this->root->half_wins += 1;
+        } else if (!we_won) {
             this->root->half_wins += 2;
         }
 
