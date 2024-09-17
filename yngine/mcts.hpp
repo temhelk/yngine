@@ -11,17 +11,26 @@
 namespace Yngine {
 
 struct MCTSNode {
-    int half_wins = 0;
-    int simulations = 0;
+    MCTSNode(BoardState board_state, Move parent_move, MCTSNode* parent);
 
-    BoardState board_state;
-    Move parent_move;
+    std::pair<uint32_t, uint32_t> get_half_wins_and_simulations() const;
+    float compute_uct(uint32_t parent_simulations) const;
+    void create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng);
+    MCTSNode* add_child();
+    void add_half_wins_and_simulations(uint32_t half_wins, uint32_t simulations);
 
-    MCTSNode* parent = nullptr;
-    MCTSNode* first_child = nullptr;
-    MCTSNode* next_sibling = nullptr;
+    std::atomic<uint64_t> half_wins_and_simulations;
+    std::atomic<bool> is_parent;
+    std::atomic<bool> is_expandable;
+    std::atomic<MCTSNode*> unexpanded_child;
+    std::atomic<bool> is_fully_expanded;
 
-    float compute_uct() const;
+    const BoardState board_state;
+    const Move parent_move;
+
+    MCTSNode* const parent;
+    MCTSNode* first_child;
+    MCTSNode* next_sibling;
 };
 
 class MCTS {
@@ -30,6 +39,7 @@ public:
     // Float limit is the amount of seconds to search for
     using SearchLimit = std::variant<int, float>;
 
+    // @TODO: move memory limit into search function?
     MCTS(std::size_t memory_limit_bytes);
     ~MCTS();
 
@@ -38,21 +48,24 @@ public:
     MCTS &operator=(const MCTS &) = delete;
     MCTS &operator=(MCTS &&) = delete;
 
-    std::future<Move> search(float seconds);
+    std::future<Move> search(float seconds, int thread_count=1);
     void apply_move(Move move);
     void set_board(BoardState board);
     BoardState get_board() const;
     void reseed();
 
 private:
-    Move search_threaded(SearchLimit limit);
+    Move search_threaded(SearchLimit limit, int thread_count);
+    void search_worker(MCTSNode* root, SearchLimit limit);
 
-    XoshiroCpp::Xoshiro256StarStar xoshiro;
+    static MCTSNode* select(MCTSNode* root);
+    static MCTSNode* expand(MCTSNode* node, ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng);
+    static GameResult playout(MCTSNode* node, XoshiroCpp::Xoshiro256StarStar& prng);
+    static void backup(MCTSNode* from, GameResult playout_result);
 
     BoardState board_state;
 
     ArenaAllocator arena;
-    MCTSNode* root = nullptr;
 
     std::atomic<bool> stop_search;
     std::thread search_thread;

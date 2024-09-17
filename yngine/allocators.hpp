@@ -2,11 +2,11 @@
 #define YNGINE_ALLOCATORS_HPP
 
 // @TODO: add a pool allocator?
-// @TODO: write a Windows version
 
 #include <cstdint>
 #include <type_traits>
 #include <utility>
+#include <atomic>
 
 namespace Yngine {
 
@@ -20,19 +20,18 @@ public:
     ArenaAllocator &operator=(const ArenaAllocator &) = delete;
     ArenaAllocator &operator=(ArenaAllocator &&) = delete;
 
-    uint8_t* allocate_bytes(std::size_t bytes);
+    uint8_t* allocate_aligned(std::size_t size, std::size_t alignment);
     void clear();
 
     std::size_t used_bytes() const;
     std::size_t capacity_bytes() const;
-    std::size_t left_bytes() const;
 
     // Returns the memory for the object without initialization
     template<typename T>
     T* allocate_raw() {
         static_assert(std::is_trivially_destructible_v<T>);
 
-        return static_cast<T*>(this->allocate_bytes(sizeof(T)));
+        return static_cast<T*>(this->allocate_aligned(sizeof(T), std::alignment_of_v<T>));
     }
 
     // Allocates the object and initializes it with forwarded arguments
@@ -40,7 +39,7 @@ public:
     T* allocate(Args&&... args) {
         static_assert(std::is_trivially_destructible_v<T>);
 
-        void* ptr = this->allocate_bytes(sizeof(T));
+        void* ptr = this->allocate_aligned(sizeof(T), std::alignment_of_v<T>);
         if (!ptr) {
             return nullptr;
         }
@@ -52,7 +51,7 @@ public:
 
 private:
     uint8_t* data;
-    std::size_t used;
+    std::atomic<std::size_t> used;
     std::size_t capacity;
 };
 

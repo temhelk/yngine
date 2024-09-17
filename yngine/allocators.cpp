@@ -52,16 +52,21 @@ ArenaAllocator::~ArenaAllocator() {
 #endif
 }
 
+uint8_t* ArenaAllocator::allocate_aligned(std::size_t bytes, std::size_t alignment) {
+    std::size_t used_expected = this->used.load();
+    std::size_t aligned_used;
+    std::size_t used_desired;
 
-uint8_t* ArenaAllocator::allocate_bytes(std::size_t bytes) {
-    if (this->used + bytes > this->capacity) {
-        return nullptr;
-    }
+    do {
+        aligned_used = (used_expected + (alignment - 1)) & -alignment;
 
-    const auto result = this->data + this->used;
-    this->used += bytes;
+        if (this->capacity - aligned_used < bytes)
+            return nullptr;
 
-    return result;
+        used_desired = aligned_used + bytes;
+    } while (!this->used.compare_exchange_weak(used_expected, used_desired));
+
+    return this->data + aligned_used;
 }
 
 void ArenaAllocator::clear() {
@@ -74,10 +79,6 @@ std::size_t ArenaAllocator::used_bytes() const {
 
 std::size_t ArenaAllocator::capacity_bytes() const {
     return this->capacity;
-}
-
-std::size_t ArenaAllocator::left_bytes() const {
-    return this->capacity - this->used;
 }
 
 }
