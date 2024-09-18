@@ -140,6 +140,13 @@ std::future<Move> MCTS::search(float seconds, int thread_count) {
 }
 
 Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
+    // Check if we only have one move, if so return it immediatly
+    MoveList moves_from_root;
+    this->board_state.generate_moves(moves_from_root);
+    if (moves_from_root.get_size() == 1) {
+        return moves_from_root[0];
+    }
+
     // Allocate root node
     MCTSNode* root = this->arena.allocate<MCTSNode>(this->board_state, PassMove{}, nullptr);
     if (!root) {
