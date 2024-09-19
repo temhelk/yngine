@@ -29,12 +29,19 @@ void MCTSNode::create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256Star
 
         std::shuffle(&move_list[0], &move_list[move_list.get_size()], prng);
 
-        // @TODO: handle out of memory case
         const auto new_first_child = arena.allocate<MCTSNode>(
             this->board_state.with_move(move_list[0]),
             move_list[0],
             this
         );
+
+        // Here and later we return immediatly if we can't allocate children
+        // this will leave the tree in an inconsistent state but that's fine for not
+        // later we might want to revert the changes back if we failed to allocate
+        if (!new_first_child) {
+            return;
+        }
+
         this->first_child = new_first_child;
 
         MCTSNode* last_child = new_first_child;
@@ -46,6 +53,10 @@ void MCTSNode::create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256Star
                 move,
                 this
             );
+
+            if (!new_child) {
+                return;
+            }
 
             last_child->next_sibling = new_child;
             last_child = new_child;
