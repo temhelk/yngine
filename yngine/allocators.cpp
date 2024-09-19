@@ -2,10 +2,12 @@
 
 #include <iostream>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(EMSCRIPTEN)
 #include <sys/mman.h>
 #elif defined(_WIN32)
 #include <Windows.h>
+#else
+static_assert(false);
 #endif
 
 namespace Yngine {
@@ -13,7 +15,7 @@ namespace Yngine {
 ArenaAllocator::ArenaAllocator(std::size_t capacity)
     : capacity{capacity}
     , used{0} {
-#if defined(__linux__)
+#if defined(__linux__) || defined(EMSCRIPTEN)
     const auto data = mmap(
         nullptr,
         capacity,
