@@ -1,7 +1,6 @@
 #include <yngine/mcts.hpp>
 
 #include <limits>
-#include <numbers>
 #include <cmath>
 #include <random>
 #include <iostream>
@@ -35,14 +34,14 @@ void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshi
             this
         );
 
-        // Here and later we return immediatly if we can't allocate children
-        // this will leave the tree in an inconsistent state but that's fine for not
-        // later we might want to revert the changes back if we failed to allocate
         if (!new_first_child) {
+            this->is_parent.store(false);
             return;
         }
 
         this->first_child = new_first_child;
+
+        bool failed_to_allocate_children = false;
 
         MCTSNode* last_child = new_first_child;
         for (int move_index = 1; move_index < move_list.get_size(); move_index++) {
@@ -54,12 +53,32 @@ void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshi
                 this
             );
 
+            // We failed to allocate some of the children, we have to revert
+            // the tree to a consistent state, so we deallocate all of them
             if (!new_child) {
-                return;
+                failed_to_allocate_children = true;
+                break;
             }
 
             last_child->next_sibling = new_child;
             last_child = new_child;
+        }
+
+        // Deallocate children if failed
+        if (failed_to_allocate_children) {
+            MCTSNode* current_child = this->first_child;
+            while (current_child) {
+                const auto next_child = current_child->next_sibling;
+
+                arena.free(current_child);
+
+                current_child = next_child;
+            }
+
+            this->first_child = nullptr;
+            this->is_parent.store(false);
+
+            return;
         }
 
         this->unexpanded_child.store(this->first_child);
