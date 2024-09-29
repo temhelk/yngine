@@ -11,27 +11,36 @@ namespace Yngine {
 
 struct PlaceRingMove {
     uint8_t index;
+
+    bool operator==(const PlaceRingMove&) const = default;
 };
 
 struct RingMove {
     uint8_t from;
     uint8_t to;
     Direction direction;
+
+    bool operator==(const RingMove&) const = default;
 };
 
 struct RemoveRowMove {
     uint8_t from;
     Direction direction;
+
+    bool operator==(const RemoveRowMove&) const;
 };
 
 struct RemoveRingMove {
     uint8_t index;
+
+    bool operator==(const RemoveRingMove&) const = default;
 };
 
 // We need this for a very rare situation where current player cannot make any
 // legal move with their ring. That case is not mentioned in the official rules,
 // but the author of the game clarified that that player should pass their move
 struct PassMove {
+    bool operator==(const PassMove&) const = default;
 };
 
 using Move = std::variant<

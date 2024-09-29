@@ -22,14 +22,14 @@ MCTSNode::MCTSNode(BoardState board_state, Move parent_move, MCTSNode* parent)
     , next_sibling{nullptr} {
 }
 
-void MCTSNode::create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng) {
+void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng) {
     if (this->is_parent.exchange(true) == false) {
         MoveList move_list;
         this->board_state.generate_moves(move_list);
 
         std::shuffle(&move_list[0], &move_list[move_list.get_size()], prng);
 
-        const auto new_first_child = arena.allocate<MCTSNode>(
+        const auto new_first_child = arena.allocate(
             this->board_state.with_move(move_list[0]),
             move_list[0],
             this
@@ -48,7 +48,7 @@ void MCTSNode::create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256Star
         for (int move_index = 1; move_index < move_list.get_size(); move_index++) {
             const auto move = move_list[move_index];
 
-            MCTSNode* new_child = arena.allocate<MCTSNode>(
+            MCTSNode* new_child = arena.allocate(
                 this->board_state.with_move(move),
                 move,
                 this
@@ -113,7 +113,7 @@ float MCTSNode::compute_uct(uint32_t parent_simulations) const {
         return std::numeric_limits<float>::infinity();
     }
 
-    const float exploration_parameter = std::numbers::sqrt2_v<float>;
+    const float exploration_parameter = 0.5f; // std::numbers::sqrt2_v<float>;
 
     const float exploitation =
         (static_cast<float>(half_wins) / 2) /
@@ -130,7 +130,10 @@ float MCTSNode::compute_uct(uint32_t parent_simulations) const {
 }
 
 MCTS::MCTS(std::size_t memory_limit_bytes)
-    : arena{memory_limit_bytes} {
+    : board_state{}
+    , pool{memory_limit_bytes}
+    , root{nullptr}
+    , stop_search{false} {
 }
 
 MCTS::~MCTS() {
@@ -158,16 +161,18 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
         return moves_from_root[0];
     }
 
-    // Allocate root node
-    MCTSNode* root = this->arena.allocate<MCTSNode>(this->board_state, PassMove{}, nullptr);
-    if (!root) {
-        abort();
+    // Allocate root node if we haven't retained a tree from previous search
+    if (!this->root) {
+        this->root = this->pool.allocate(this->board_state, PassMove{}, nullptr);
+        if (!this->root) {
+            abort();
+        }
     }
 
     // Start workers
     std::vector<std::thread> workers;
     for (int thread_index = 0; thread_index < thread_count; thread_index++) {
-        workers.push_back(std::thread{&MCTS::search_worker, this, root, limit});
+        workers.push_back(std::thread{&MCTS::search_worker, this, this->root, limit});
     }
 
     // Wait for workers to finish
@@ -179,7 +184,7 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
     MCTSNode* most_simulations_node = nullptr;
 
     // @TODO: handle case where no children of the root were created
-    auto child = root->first_child;
+    auto child = this->root->first_child;
     while (true) {
         const auto simulations = child->get_half_wins_and_simulations().second;
 
@@ -197,15 +202,13 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
     const auto best_move = most_simulations_node->parent_move;
 
     const auto [half_wins, simulations] = most_simulations_node->get_half_wins_and_simulations();
-    const auto root_simulations = root->get_half_wins_and_simulations().second;
+    const auto root_simulations = this->root->get_half_wins_and_simulations().second;
 
-    std::cerr << "DEBUG: win rate = "
+    std::cout << "DEBUG: win rate = "
         << ((float)half_wins / 2 / simulations)
         << ", move confidence = " << ((float)simulations / root_simulations) << std::endl;
 
-    std::cerr << "DEBUG: iters = " << root_simulations << ", memory used (MB) = " << (this->arena.used_bytes() / 1024 / 1024) << std::endl;
-
-    this->arena.clear();
+    std::cout << "DEBUG: iters = " << root_simulations << ", memory used (MB) = " << (this->pool.used_bytes() / 1024 / 1024) << ", tree size = " << MCTS::tree_size(this->root) << "\n" << std::endl;
 
     return best_move;
 }
@@ -238,7 +241,7 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
         MCTSNode* selected_node = MCTS::select(root);
 
         // Expansion phase
-        MCTSNode* expanded_node = MCTS::expand(selected_node, arena, prng);
+        MCTSNode* expanded_node = MCTS::expand(selected_node, pool, prng);
 
         // Simulation phase
         GameResult playout_result = MCTS::playout(expanded_node, prng);
@@ -279,11 +282,11 @@ MCTSNode* MCTS::select(MCTSNode* root) {
     return current;
 }
 
-MCTSNode* MCTS::expand(MCTSNode* node, ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng) {
+MCTSNode* MCTS::expand(MCTSNode* node, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng) {
     MCTSNode* result = node;
 
     if (node->board_state.get_next_action() != NextAction::Done) {
-        node->create_children(arena, prng);
+        node->create_children(pool, prng);
         result = node->add_child();
     }
 
@@ -327,8 +330,62 @@ void MCTS::backup(MCTSNode* from, GameResult playout_result) {
     propagation_current->add_half_wins_and_simulations(0, 1);
 }
 
+void MCTS::free_subtree(MCTSNode* node) {
+    // @TODO: do we want to reverse the freeing order?
+    MCTSNode* current_child = node->first_child;
+    while (current_child) {
+        MCTSNode* next_child = current_child->next_sibling;
+
+        this->free_subtree(current_child);
+
+        current_child = next_child;
+    }
+
+    this->pool.free(node);
+}
+
 void MCTS::apply_move(Move move) {
     this->board_state.apply_move(move);
+
+    // Reuse part of the tree that we have from previous searches if possible
+    if (this->root) {
+        MCTSNode* new_root = nullptr;
+        MCTSNode* current_child = this->root->first_child;
+
+        if (!current_child) {
+            this->root = nullptr;
+            return;
+        }
+
+        while (current_child) {
+            MCTSNode* next_child = current_child->next_sibling;
+
+            if (current_child->parent_move == move) {
+                assert(new_root == nullptr);
+                new_root = current_child;
+            } else {
+                this->free_subtree(current_child);
+            }
+
+            current_child = next_child;
+        }
+
+        if (new_root) {
+            new_root->next_sibling = nullptr;
+            new_root->parent = nullptr;
+
+            this->root = new_root;
+        } else {
+            this->root = nullptr;
+        }
+    }
+
+    if (this->root) {
+        auto [half_wins, simulations] = this->root->get_half_wins_and_simulations();
+        std::cout << "DEBUG: move winrate = " << (float)half_wins / 2 / simulations << "\n";
+    }
+
+    std::cout << "DEBUG: tree size after move = " << MCTS::tree_size(this->root) << "\n" << std::endl;
 }
 
 void MCTS::set_board(BoardState board) {
@@ -337,6 +394,23 @@ void MCTS::set_board(BoardState board) {
 
 BoardState MCTS::get_board() const {
     return this->board_state;
+}
+
+int MCTS::tree_size(MCTSNode* node) {
+    if (!node) {
+        return 0;
+    }
+
+    int children_sizes_sum = 0;
+
+    MCTSNode* current_child = node->first_child;
+    while (current_child) {
+        children_sizes_sum += MCTS::tree_size(current_child);
+
+        current_child = current_child->next_sibling;
+    }
+
+    return children_sizes_sum + 1;
 }
 
 }

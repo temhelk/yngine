@@ -41,6 +41,8 @@ void BoardState::generate_moves(MoveList& move_list) const {
 void BoardState::apply_move(Move move) {
     std::visit(variant_overloaded{
         [this](PlaceRingMove move) {
+            assert(this->next_action == NextAction::RingPlacement);
+
             if (this->last_ring_move_color == Color::Black) {
                 assert(this->white_rings.get_bit(move.index) == 0);
                 this->white_rings.set_bit(move.index);
@@ -58,6 +60,8 @@ void BoardState::apply_move(Move move) {
             }
         },
         [this](RingMove move) {
+            assert(this->next_action == NextAction::RingMovement);
+
             const auto all_markers = this->white_markers | this->black_markers;
             assert(all_markers.get_bit(move.to) == 0);
 
@@ -110,6 +114,8 @@ void BoardState::apply_move(Move move) {
             }
         },
         [this](RemoveRowMove move) {
+            assert(this->next_action == NextAction::RowRemoval);
+
             const auto remove_markers = BoardState::line_in_direction(move.from, move.direction, 5);
             assert(remove_markers.popcount() == 5);
 
@@ -124,6 +130,8 @@ void BoardState::apply_move(Move move) {
             this->next_action = NextAction::RingRemoval;
         },
         [this](RemoveRingMove move) {
+            assert(this->next_action == NextAction::RingRemoval);
+
             if (this->ring_and_row_removal_color == Color::White) {
                 this->white_rings.clear_bit(move.index);
             } else {
@@ -147,6 +155,8 @@ void BoardState::apply_move(Move move) {
             }
         },
         [this](PassMove move) {
+            assert(this->next_action == NextAction::RingMovement);
+
             this->last_ring_move_color = opposite(this->last_ring_move_color);
         },
     }, move);
@@ -417,9 +427,6 @@ std::optional<Color> BoardState::check_rows(RingMove last_move) const {
         this->white_markers : this->black_markers;
 
     if (last_mover_markers.get_bit(last_move.from) == 1) {
-        auto last_mover_affected_markers_iter =
-            last_mover_markers & affected_nodes;
-
         const auto length_in_move_direction =
             length_of_row(last_mover_markers, last_move.from, last_move.direction);
 

@@ -15,7 +15,7 @@ struct MCTSNode {
 
     std::pair<uint32_t, uint32_t> get_half_wins_and_simulations() const;
     float compute_uct(uint32_t parent_simulations) const;
-    void create_children(ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng);
+    void create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng);
     MCTSNode* add_child();
     void add_half_wins_and_simulations(uint32_t half_wins, uint32_t simulations);
 
@@ -28,7 +28,7 @@ struct MCTSNode {
     const BoardState board_state;
     const Move parent_move;
 
-    MCTSNode* const parent;
+    MCTSNode* parent;
     MCTSNode* first_child;
     MCTSNode* next_sibling;
 };
@@ -52,20 +52,25 @@ public:
     void apply_move(Move move);
     void set_board(BoardState board);
     BoardState get_board() const;
-    void reseed();
+
+    static int tree_size(MCTSNode* node);
 
 private:
     Move search_threaded(SearchLimit limit, int thread_count);
     void search_worker(MCTSNode* root, SearchLimit limit);
 
     static MCTSNode* select(MCTSNode* root);
-    static MCTSNode* expand(MCTSNode* node, ArenaAllocator& arena, XoshiroCpp::Xoshiro256StarStar& prng);
+    static MCTSNode* expand(MCTSNode* node, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng);
     static GameResult playout(MCTSNode* node, XoshiroCpp::Xoshiro256StarStar& prng);
     static void backup(MCTSNode* from, GameResult playout_result);
 
+    void free_subtree(MCTSNode* node);
+
     BoardState board_state;
 
-    ArenaAllocator arena;
+    PoolAllocator<MCTSNode> pool;
+
+    MCTSNode* root;
 
     std::atomic<bool> stop_search;
     std::thread search_thread;

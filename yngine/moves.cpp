@@ -1,8 +1,26 @@
 #include <yngine/moves.hpp>
+#include <yngine/board_state.hpp>
 
 #include <cassert>
 
 namespace Yngine {
+
+bool RemoveRowMove::operator==(const RemoveRowMove& rhs) const {
+    if (this->from      == rhs.from &&
+        this->direction == rhs.direction) {
+        return true;
+    }
+
+    const auto alternative_index =
+        Bitboard::index_move_direction(this->from, this->direction, 4);
+
+    if (alternative_index         == rhs.from &&
+        opposite(this->direction) == rhs.direction) {
+        return true;
+    }
+
+    return false;
+}
 
 std::size_t MoveList::get_size() const {
     return this->size;
