@@ -8,30 +8,32 @@
 
 namespace Yngine {
 
-MCTSNode::MCTSNode(BoardState board_state, Move parent_move, MCTSNode* parent)
+MCTSNode::MCTSNode(Move parent_move, MCTSNode* parent, Color color)
     : half_wins_and_simulations{0}
     , is_parent{false}
     , is_expandable{false}
     , unexpanded_child{nullptr}
     , is_fully_expanded{false}
-    , board_state{board_state}
     , parent_move{parent_move}
     , parent{parent}
+    , color{color}
     , first_child{nullptr}
     , next_sibling{nullptr} {
 }
 
-void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng) {
+void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng, BoardState board_state) {
     if (this->is_parent.exchange(true) == false) {
         MoveList move_list;
-        this->board_state.generate_moves(move_list);
+        board_state.generate_moves(move_list);
 
         std::shuffle(&move_list[0], &move_list[move_list.get_size()], prng);
 
+        const Color node_color = board_state.whose_move();
+
         const auto new_first_child = arena.allocate(
-            this->board_state.with_move(move_list[0]),
             move_list[0],
-            this
+            this,
+            node_color
         );
 
         if (!new_first_child) {
@@ -48,9 +50,9 @@ void MCTSNode::create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshi
             const auto move = move_list[move_index];
 
             MCTSNode* new_child = arena.allocate(
-                this->board_state.with_move(move),
                 move,
-                this
+                this,
+                node_color
             );
 
             // We failed to allocate some of the children, we have to revert
@@ -182,7 +184,12 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
 
     // Allocate root node if we haven't retained a tree from previous search
     if (!this->root) {
-        this->root = this->pool.allocate(this->board_state, PassMove{}, nullptr);
+        this->root = this->pool.allocate(
+            PassMove{},
+            nullptr,
+            opposite(this->board_state.whose_move()) // Color here doesn't matter
+        );
+
         if (!this->root) {
             abort();
         }
@@ -257,13 +264,13 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
         }
 
         // Selection phase
-        MCTSNode* selected_node = MCTS::select(root);
+        auto [selected_node, selected_board_state] = MCTS::select(root, this->board_state);
 
         // Expansion phase
-        MCTSNode* expanded_node = MCTS::expand(selected_node, pool, prng);
+        MCTSNode* expanded_node = MCTS::expand(selected_node, selected_board_state, pool, prng);
 
         // Simulation phase
-        GameResult playout_result = MCTS::playout(expanded_node, prng);
+        GameResult playout_result = MCTS::playout(expanded_node, selected_board_state, prng);
 
         // Backpropagation phase
         MCTS::backup(expanded_node, playout_result);
@@ -272,8 +279,9 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
     }
 }
 
-MCTSNode* MCTS::select(MCTSNode* root) {
+std::tuple<MCTSNode*, BoardState> MCTS::select(MCTSNode* root, BoardState root_board_state) {
     MCTSNode* current = root;
+    BoardState current_board_state = root_board_state;
 
     while (current->is_fully_expanded.load()) {
         uint32_t parent_simulations = current->get_half_wins_and_simulations().second;
@@ -296,32 +304,26 @@ MCTSNode* MCTS::select(MCTSNode* root) {
         }
 
         current = greatest_uct_node;
+        current_board_state.apply_move(greatest_uct_node->parent_move);
     }
 
-    return current;
+    return std::tie(current, current_board_state);
 }
 
-MCTSNode* MCTS::expand(MCTSNode* node, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng) {
+MCTSNode* MCTS::expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng) {
     MCTSNode* result = node;
 
-    if (node->board_state.get_next_action() != NextAction::Done) {
-        node->create_children(pool, prng);
+    if (board_state.get_next_action() != NextAction::Done) {
+        node->create_children(pool, prng, board_state);
         result = node->add_child();
     }
 
     return result;
 }
 
-GameResult MCTS::playout(MCTSNode* node, XoshiroCpp::Xoshiro256StarStar& prng) {
-    auto board_state_copy = node->board_state;
-
-    if (board_state_copy.get_next_action() == NextAction::Done) {
-        return board_state_copy.game_result();
-    }
-
-    board_state_copy.playout(prng);
-
-    return board_state_copy.game_result();
+GameResult MCTS::playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng) {
+    board_state.playout(prng);
+    return board_state.game_result();
 }
 
 void MCTS::backup(MCTSNode* from, GameResult playout_result) {
@@ -332,7 +334,7 @@ void MCTS::backup(MCTSNode* from, GameResult playout_result) {
         if (playout_result == GameResult::Draw) {
             half_wins = 1;
         } else {
-            const auto node_color = propagation_current->parent->board_state.whose_move();
+            const auto node_color = propagation_current->color;
 
             if (playout_result == GameResult::WhiteWon && node_color == Color::White ||
                 playout_result == GameResult::BlackWon && node_color == Color::Black) {

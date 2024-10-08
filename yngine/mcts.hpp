@@ -11,11 +11,11 @@
 namespace Yngine {
 
 struct MCTSNode {
-    MCTSNode(BoardState board_state, Move parent_move, MCTSNode* parent);
+    MCTSNode(Move parent_move, MCTSNode* parent, Color color);
 
     std::pair<uint32_t, uint32_t> get_half_wins_and_simulations() const;
     float compute_uct(uint32_t parent_simulations) const;
-    void create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng);
+    void create_children(PoolAllocator<MCTSNode>& arena, XoshiroCpp::Xoshiro256StarStar& prng, BoardState board_state);
     MCTSNode* add_child();
     void add_half_wins_and_simulations(uint32_t half_wins, uint32_t simulations);
 
@@ -25,8 +25,8 @@ struct MCTSNode {
     std::atomic<MCTSNode*> unexpanded_child;
     std::atomic<bool> is_fully_expanded;
 
-    const BoardState board_state;
     const Move parent_move;
+    const Color color;
 
     MCTSNode* parent;
     MCTSNode* first_child;
@@ -59,9 +59,9 @@ private:
     Move search_threaded(SearchLimit limit, int thread_count);
     void search_worker(MCTSNode* root, SearchLimit limit);
 
-    static MCTSNode* select(MCTSNode* root);
-    static MCTSNode* expand(MCTSNode* node, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng);
-    static GameResult playout(MCTSNode* node, XoshiroCpp::Xoshiro256StarStar& prng);
+    static std::tuple<MCTSNode*, BoardState> select(MCTSNode* root, BoardState root_board_state);
+    static MCTSNode* expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng);
+    static GameResult playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng);
     static void backup(MCTSNode* from, GameResult playout_result);
 
     void free_subtree(MCTSNode* node);
