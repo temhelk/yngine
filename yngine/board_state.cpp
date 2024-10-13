@@ -173,16 +173,7 @@ void BoardState::playout(XoshiroCpp::Xoshiro256StarStar& prng) {
     while (this->next_action != NextAction::Done) {
         this->generate_moves(move_list);
 
-        // Biased distribution from [0 to move_list_size)
-        const auto rand_32 = static_cast<uint32_t>(prng());
-        auto rand_move_index =
-            static_cast<uint64_t>(rand_32) * static_cast<uint64_t>(move_list.get_size());
-        rand_move_index >>= 32;
-
-        assert(rand_move_index < move_list.get_size());
-
-        const auto move = move_list[rand_move_index];
-
+        const auto move = move_list.get_random(prng);
         this->apply_move(move);
 
         move_list.reset();

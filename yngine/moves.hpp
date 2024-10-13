@@ -3,6 +3,8 @@
 
 #include <yngine/common.hpp>
 
+#include <XoshiroCpp.hpp>
+
 #include <cstdint>
 #include <array>
 #include <variant>
@@ -36,8 +38,8 @@ struct RemoveRingMove {
     bool operator==(const RemoveRingMove&) const = default;
 };
 
-// We need this for a very rare situation where current player cannot make any
-// legal move with their ring. That case is not mentioned in the official rules,
+// We need this for a very rare situation where the current player cannot make any
+// legal moves with their rings. That case is not mentioned in the official rules,
 // but the author of the game clarified that that player should pass their move
 struct PassMove {
     bool operator==(const PassMove&) const = default;
@@ -56,10 +58,12 @@ constexpr std::size_t MOVE_LIST_NUMBER = 128;
 class MoveList {
 public:
     std::size_t get_size() const;
+    Move get_random(XoshiroCpp::Xoshiro256StarStar& prng) const;
     void append(Move move);
     void reset();
 
     Move& operator[](std::size_t index);
+    Move operator[](std::size_t index) const;
 
 private:
     std::size_t size = 0;

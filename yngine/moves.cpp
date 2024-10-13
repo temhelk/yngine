@@ -35,6 +35,22 @@ Move& MoveList::operator[](std::size_t index) {
     return this->moves[index];
 }
 
+Move MoveList::operator[](std::size_t index) const {
+    return this->moves[index];
+}
+
+Move MoveList::get_random(XoshiroCpp::Xoshiro256StarStar& prng) const {
+    // Biased distribution from [0 to move_list_size)
+    const auto rand_32 = static_cast<uint32_t>(prng());
+    auto rand_move_index =
+        static_cast<uint64_t>(rand_32) * static_cast<uint64_t>(this->get_size());
+    rand_move_index >>= 32;
+
+    assert(rand_move_index < this->get_size());
+
+    return (*this)[rand_move_index];
+}
+
 void MoveList::reset() {
     this->size = 0;
 }
