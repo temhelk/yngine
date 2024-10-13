@@ -162,14 +162,14 @@ MCTS::~MCTS() {
     this->search_thread.join();
 }
 
-std::future<Move> MCTS::search(float seconds, int thread_count) {
+std::future<Move> MCTS::search(SearchLimit search_limit, int thread_count) {
     std::packaged_task<Move(MCTS*, SearchLimit, int)> task{&MCTS::search_threaded};
     auto future = task.get_future();
 
     if (this->search_thread.joinable()) {
         this->search_thread.join();
     }
-    this->search_thread = std::thread{std::move(task), this, seconds, thread_count};
+    this->search_thread = std::thread{std::move(task), this, search_limit, thread_count};
 
     return std::move(future);
 }
@@ -245,11 +245,10 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
     std::random_device rd;
     XoshiroCpp::Xoshiro256StarStar prng((static_cast<uint64_t>(rd()) << 32) | rd());
 
-    int iter = 0;
     while (!this->stop_search) {
         // Check if we exceeded the computational budget
         if (auto* limit_iters = std::get_if<int>(&limit)) {
-            if (iter >= *limit_iters) {
+            if (root->get_half_wins_and_simulations().second >= *limit_iters) {
                 break;
             }
         } else if (auto* limit_seconds = std::get_if<float>(&limit)) {
@@ -274,8 +273,6 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
 
         // Backpropagation phase
         MCTS::backup(expanded_node, playout_result);
-
-        iter++;
     }
 }
 
@@ -415,6 +412,10 @@ void MCTS::set_board(BoardState board) {
 
 BoardState MCTS::get_board() const {
     return this->board_state;
+}
+
+MCTSNode* MCTS::get_root() const {
+    return this->root;
 }
 
 int MCTS::tree_size(MCTSNode* node) {

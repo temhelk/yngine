@@ -35,7 +35,8 @@ struct MCTSNode {
 
 class MCTS {
 public:
-    // Int limit is the amount of iterations to perform
+    // Int limit is the amount of iterations to perform,
+    //   right now it can perform up to (thread count - 1) more iterations that specified
     // Float limit is the amount of seconds to search for
     using SearchLimit = std::variant<int, float>;
 
@@ -48,10 +49,11 @@ public:
     MCTS &operator=(const MCTS &) = delete;
     MCTS &operator=(MCTS &&) = delete;
 
-    std::future<Move> search(float seconds, int thread_count=1);
+    std::future<Move> search(SearchLimit search_limit, int thread_count=1);
     void apply_move(Move move);
     void set_board(BoardState board);
     BoardState get_board() const;
+    MCTSNode* get_root() const;
 
     static int tree_size(MCTSNode* node);
 
