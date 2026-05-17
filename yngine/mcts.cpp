@@ -150,8 +150,8 @@ float MCTSNode::compute_uct(uint32_t parent_simulations) const {
     return exploitation + exploration;
 }
 
-MCTS::MCTS(std::size_t memory_limit_bytes)
-    : board_state{}
+MCTS::MCTS(bool is_blitz, std::size_t memory_limit_bytes)
+    : board_state{is_blitz}
     , pool{memory_limit_bytes}
     , root{nullptr}
     , stop_search{false} {

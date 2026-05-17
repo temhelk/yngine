@@ -20,7 +20,7 @@ enum class NextAction : uint8_t {
 
 class BoardState {
 public:
-    BoardState();
+    BoardState(bool is_blitz);
 
     // MoveList should be empty before calling this function
     void generate_moves(MoveList& move_list) const;
@@ -44,6 +44,8 @@ private:
 
     static uint8_t length_of_row(Bitboard bitboard, uint8_t index, Direction direction);
     static Bitboard line_in_direction(uint8_t index, Direction direction, uint8_t length);
+
+    bool is_blitz = false;
 
     NextAction next_action;
     Color ring_and_row_removal_color;

@@ -5,8 +5,9 @@
 
 namespace Yngine {
 
-BoardState::BoardState()
-    : next_action{NextAction::RingPlacement}
+BoardState::BoardState(bool is_blitz)
+    : is_blitz{is_blitz}
+    , next_action{NextAction::RingPlacement}
     , ring_and_row_removal_color{Color::Black}
     , last_ring_move_color{Color::Black}
     , last_ring_move{0, 0, Direction::SE}
@@ -138,9 +139,12 @@ void BoardState::apply_move(Move move) {
                 this->black_rings.clear_bit(move.index);
             }
 
+            const auto rings_to_win =
+                (this->is_blitz) ? 4 : 2;
+
             // Check for win condition
-            if (this->white_rings.popcount() == 2 ||
-                this->black_rings.popcount() == 2) {
+            if (this->white_rings.popcount() == rings_to_win ||
+                this->black_rings.popcount() == rings_to_win) {
                 this->next_action = NextAction::Done;
                 return;
             }

@@ -41,7 +41,7 @@ public:
     using SearchLimit = std::variant<int, float>;
 
     // @TODO: move memory limit into search function?
-    MCTS(std::size_t memory_limit_bytes);
+    MCTS(bool is_blitz, std::size_t memory_limit_bytes);
     ~MCTS();
 
     MCTS(const MCTS &) = delete;
