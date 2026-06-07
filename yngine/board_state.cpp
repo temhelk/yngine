@@ -5,9 +5,8 @@
 
 namespace Yngine {
 
-BoardState::BoardState(bool is_blitz)
-    : is_blitz{is_blitz}
-    , next_action{NextAction::RingPlacement}
+BoardState::BoardState()
+    : next_action{NextAction::RingPlacement}
     , ring_and_row_removal_color{Color::Black}
     , last_ring_move_color{Color::Black}
     , last_ring_move{0, 0, Direction::SE}
@@ -39,7 +38,7 @@ void BoardState::generate_moves(MoveList& move_list) const {
     assert(move_list.get_size() != 0);
 }
 
-void BoardState::apply_move(Move move) {
+void BoardState::apply_move(Move move, int rings_left_to_win) {
     std::visit(variant_overloaded{
         [this](PlaceRingMove move) {
             assert(this->next_action == NextAction::RingPlacement);
@@ -130,7 +129,7 @@ void BoardState::apply_move(Move move) {
 
             this->next_action = NextAction::RingRemoval;
         },
-        [this](RemoveRingMove move) {
+        [this, rings_left_to_win](RemoveRingMove move) {
             assert(this->next_action == NextAction::RingRemoval);
 
             if (this->ring_and_row_removal_color == Color::White) {
@@ -139,12 +138,9 @@ void BoardState::apply_move(Move move) {
                 this->black_rings.clear_bit(move.index);
             }
 
-            const auto rings_to_win =
-                (this->is_blitz) ? 4 : 2;
-
             // Check for win condition
-            if (this->white_rings.popcount() == rings_to_win ||
-                this->black_rings.popcount() == rings_to_win) {
+            if (this->white_rings.popcount() == rings_left_to_win ||
+                this->black_rings.popcount() == rings_left_to_win) {
                 this->next_action = NextAction::Done;
                 return;
             }
@@ -166,19 +162,13 @@ void BoardState::apply_move(Move move) {
     }, move);
 }
 
-BoardState BoardState::with_move(Move move) const {
-    auto board_copy = *this;
-    board_copy.apply_move(move);
-    return board_copy;
-}
-
-void BoardState::playout(XoshiroCpp::Xoshiro256StarStar& prng) {
+void BoardState::playout(XoshiroCpp::Xoshiro256StarStar& prng, int rings_left_to_win) {
     MoveList move_list;
     while (this->next_action != NextAction::Done) {
         this->generate_moves(move_list);
 
         const auto move = move_list.get_random(prng);
-        this->apply_move(move);
+        this->apply_move(move, rings_left_to_win);
 
         move_list.reset();
     }

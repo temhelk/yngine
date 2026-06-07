@@ -151,7 +151,8 @@ float MCTSNode::compute_uct(uint32_t parent_simulations) const {
 }
 
 MCTS::MCTS(bool is_blitz, std::size_t memory_limit_bytes)
-    : board_state{is_blitz}
+    : board_state{}
+    , is_blitz{is_blitz}
     , pool{memory_limit_bytes}
     , root{nullptr}
     , stop_search{false} {
@@ -263,20 +264,20 @@ void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
         }
 
         // Selection phase
-        auto [selected_node, selected_board_state] = MCTS::select(root, this->board_state);
+        auto [selected_node, selected_board_state] = MCTS::select(root, this->board_state, this->is_blitz);
 
         // Expansion phase
-        MCTSNode* expanded_node = MCTS::expand(selected_node, selected_board_state, pool, prng);
+        auto [expanded_node, expanded_board_state] = MCTS::expand(selected_node, selected_board_state, pool, prng, this->is_blitz);
 
         // Simulation phase
-        GameResult playout_result = MCTS::playout(expanded_node, selected_board_state, prng);
+        GameResult playout_result = MCTS::playout(expanded_node, expanded_board_state, prng);
 
         // Backpropagation phase
         MCTS::backup(expanded_node, playout_result);
     }
 }
 
-std::tuple<MCTSNode*, BoardState> MCTS::select(MCTSNode* root, BoardState root_board_state) {
+std::tuple<MCTSNode*, BoardState> MCTS::select(MCTSNode* root, BoardState root_board_state, bool is_blitz) {
     MCTSNode* current = root;
     BoardState current_board_state = root_board_state;
 
@@ -301,21 +302,29 @@ std::tuple<MCTSNode*, BoardState> MCTS::select(MCTSNode* root, BoardState root_b
         }
 
         current = greatest_uct_node;
-        current_board_state.apply_move(greatest_uct_node->parent_move);
+        current_board_state.apply_move(greatest_uct_node->parent_move, is_blitz ? 4 : 2);
     }
 
     return std::tie(current, current_board_state);
 }
 
-MCTSNode* MCTS::expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng) {
-    MCTSNode* result = node;
+std::tuple<MCTSNode*, BoardState> MCTS::expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz) {
+    MCTSNode* expanded_node = node;
 
     if (board_state.get_next_action() != NextAction::Done) {
         node->create_children(pool, prng, board_state);
-        result = node->add_child();
+        expanded_node = node->add_child();
     }
 
-    return result;
+    auto expanded_board_state = board_state;
+
+    // We don't always get a new child node from add_child()
+    // sometimes we get the node we tried to expand
+    if (expanded_node != node) {
+        expanded_board_state.apply_move(expanded_node->parent_move, is_blitz ? 4 : 2);
+    }
+
+    return std::tie(expanded_node, expanded_board_state);
 }
 
 GameResult MCTS::playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng) {
@@ -363,7 +372,7 @@ void MCTS::free_subtree(MCTSNode* node) {
 }
 
 void MCTS::apply_move(Move move) {
-    this->board_state.apply_move(move);
+    this->board_state.apply_move(move, this->is_blitz ? 4 : 2);
 
     // Reuse part of the tree that we have from previous searches if possible
     if (this->root) {

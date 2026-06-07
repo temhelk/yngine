@@ -61,14 +61,15 @@ private:
     Move search_threaded(SearchLimit limit, int thread_count);
     void search_worker(MCTSNode* root, SearchLimit limit);
 
-    static std::tuple<MCTSNode*, BoardState> select(MCTSNode* root, BoardState root_board_state);
-    static MCTSNode* expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng);
+    static std::tuple<MCTSNode*, BoardState> select(MCTSNode* root, BoardState root_board_state, bool is_blitz);
+    static std::tuple<MCTSNode*, BoardState> expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz);
     static GameResult playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng);
     static void backup(MCTSNode* from, GameResult playout_result);
 
     void free_subtree(MCTSNode* node);
 
     BoardState board_state;
+    bool is_blitz;
 
     PoolAllocator<MCTSNode> pool;
 

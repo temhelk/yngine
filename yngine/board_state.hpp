@@ -20,14 +20,13 @@ enum class NextAction : uint8_t {
 
 class BoardState {
 public:
-    BoardState(bool is_blitz);
+    BoardState();
 
     // MoveList should be empty before calling this function
     void generate_moves(MoveList& move_list) const;
-    void apply_move(Move move);
-    BoardState with_move(Move move) const;
+    void apply_move(Move move, int rings_left_to_win=2);
 
-    void playout(XoshiroCpp::Xoshiro256StarStar& prng);
+    void playout(XoshiroCpp::Xoshiro256StarStar& prng, int rings_left_to_win=2);
 
     NextAction get_next_action() const;
     GameResult game_result() const;
