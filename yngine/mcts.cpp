@@ -160,7 +160,9 @@ MCTS::MCTS(bool is_blitz, std::size_t memory_limit_bytes)
 
 MCTS::~MCTS() {
     this->stop_search = true;
-    this->search_thread.join();
+    if (this->search_thread.joinable()) {
+        this->search_thread.join();
+    }
 }
 
 std::future<Move> MCTS::search(SearchLimit search_limit, int thread_count) {
