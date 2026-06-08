@@ -58,7 +58,7 @@ public:
     // while when analyzing a game, we don't care that there's only on move
     // available, we want to get different statistics (like winrate and so on)
     std::optional<Move> check_for_forced_move();
-    void start_search(int thread_count=1);
+    void start_search(int thread_count);
     void stop_search();
     bool is_searching();
     std::optional<SearchInfo> get_search_info();
