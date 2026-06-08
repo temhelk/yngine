@@ -3,7 +3,6 @@
 #include <limits>
 #include <cmath>
 #include <random>
-#include <iostream>
 #include <functional>
 #include <algorithm>
 
@@ -162,10 +161,19 @@ MCTS::~MCTS() {
     this->stop_search();
 }
 
+std::optional<Move> MCTS::check_for_forced_move() {
+    MoveList moves_from_root;
+    this->board_state.generate_moves(moves_from_root);
+    if (moves_from_root.get_size() == 1) {
+        return moves_from_root[0];
+    }
+
+    return std::nullopt;
+}
+
 void MCTS::start_search(int thread_count) {
     // Make sure we're not running a search already @TODO: add assert
     this->stop_search();
-    this->best_move = std::nullopt;
 
     this->search_thread = std::jthread{std::bind_front(&MCTS::search_threaded, this), thread_count};
 }
@@ -181,22 +189,51 @@ bool MCTS::is_searching() {
     return this->search_thread.joinable();
 }
 
-std::optional<Move> MCTS::get_best_move() {
-    assert(!this->is_searching());
-    this->stop_search();
+std::optional<SearchInfo> MCTS::get_search_info() {
+    SearchInfo result{};
 
-    return this->best_move;
+    if (!this->root)
+        return std::nullopt;
+
+    auto child = this->root->first_child;
+    if (!child)
+        return std::nullopt;
+
+    uint32_t most_simulations = 0;
+    MCTSNode* most_simulations_node = nullptr;
+    while (true) {
+        const auto simulations = child->get_half_wins_and_simulations().second;
+
+        if (simulations > most_simulations) {
+            most_simulations = simulations;
+            most_simulations_node = child;
+        }
+
+        if (!child->next_sibling)
+            break;
+
+        child = child->next_sibling;
+    }
+
+    result.best_move = most_simulations_node->parent_move;
+
+    const auto [half_wins, simulations] = most_simulations_node->get_half_wins_and_simulations();
+    const auto root_simulations = this->root->get_half_wins_and_simulations().second;
+
+    result.win_rate = (float)half_wins / 2 / simulations;
+    result.confidence = (float)simulations / root_simulations;
+
+    result.iterations = root_simulations;
+    result.memory_used = this->pool.used_bytes();
+
+    return result;
+}
+
+std::size_t MCTS::get_tree_size() {
+    return MCTS::tree_size(this->root);
 }
 
 void MCTS::search_threaded(std::stop_token stoken, int thread_count) {
-    // Check if we only have one move, if so return it immediatly
-    MoveList moves_from_root;
-    this->board_state.generate_moves(moves_from_root);
-    if (moves_from_root.get_size() == 1) {
-        this->best_move = moves_from_root[0];
-        return;
-    }
-
     // Allocate root node if we haven't retained a tree from previous search
     if (!this->root) {
         this->root = this->pool.allocate(
@@ -227,41 +264,6 @@ void MCTS::search_threaded(std::stop_token stoken, int thread_count) {
     for (auto& worker : workers) {
         worker.join();
     }
-
-    uint32_t most_simulations = 0;
-    MCTSNode* most_simulations_node = nullptr;
-
-    auto child = this->root->first_child;
-    if (!child) {
-        return;
-    }
-
-    while (true) {
-        const auto simulations = child->get_half_wins_and_simulations().second;
-
-        if (simulations > most_simulations) {
-            most_simulations = simulations;
-            most_simulations_node = child;
-        }
-
-        if (!child->next_sibling)
-            break;
-
-        child = child->next_sibling;
-    }
-
-    const auto best_move_result = most_simulations_node->parent_move;
-
-    const auto [half_wins, simulations] = most_simulations_node->get_half_wins_and_simulations();
-    const auto root_simulations = this->root->get_half_wins_and_simulations().second;
-
-    std::cout << "DEBUG: win rate = "
-        << ((float)half_wins / 2 / simulations)
-        << ", move confidence = " << ((float)simulations / root_simulations) << std::endl;
-
-    std::cout << "DEBUG: iters = " << root_simulations << ", memory used (MB) = " << (this->pool.used_bytes() / 1024 / 1024) << ", tree size = " << MCTS::tree_size(this->root) << "\n" << std::endl;
-
-    this->best_move = best_move_result;
 }
 
 void MCTS::search_worker(std::stop_token stoken, MCTSNode* root) {
@@ -415,13 +417,6 @@ void MCTS::apply_move(Move move) {
             this->root = nullptr;
         }
     }
-
-    if (this->root) {
-        auto [half_wins, simulations] = this->root->get_half_wins_and_simulations();
-        std::cout << "DEBUG: move winrate = " << (float)half_wins / 2 / simulations << "\n";
-    }
-
-    std::cout << "DEBUG: tree size after move = " << MCTS::tree_size(this->root) << "\n" << std::endl;
 }
 
 void MCTS::set_board(BoardState board) {

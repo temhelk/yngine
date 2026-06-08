@@ -10,6 +10,14 @@
 
 namespace Yngine {
 
+struct SearchInfo {
+    Move best_move;
+    size_t iterations;
+    float win_rate;
+    float confidence;
+    size_t memory_used;
+};
+
 struct MCTSNode {
     MCTSNode(Move parent_move, MCTSNode* parent, Color color);
 
@@ -44,10 +52,18 @@ public:
     MCTS &operator=(const MCTS &) = delete;
     MCTS &operator=(MCTS &&) = delete;
 
+    // If we are finding a move for the AI agent, we don't want to
+    // wait for any amount of time if the move is forced (only one available)
+    // so the game UI uses that function to get that move if available
+    // while when analyzing a game, we don't care that there's only on move
+    // available, we want to get different statistics (like winrate and so on)
+    std::optional<Move> check_for_forced_move();
     void start_search(int thread_count=1);
     void stop_search();
     bool is_searching();
-    std::optional<Move> get_best_move(); // Should only be called after stop_search()
+    std::optional<SearchInfo> get_search_info();
+    // Should be called after the search has ended
+    std::size_t get_tree_size();
 
     void apply_move(Move move);
     void set_board(BoardState board);
@@ -76,7 +92,6 @@ private:
     MCTSNode* root;
 
     std::jthread search_thread;
-    std::optional<Move> best_move;
 };
 
 }
