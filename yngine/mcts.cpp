@@ -4,7 +4,8 @@
 #include <cmath>
 #include <random>
 #include <iostream>
-#include <chrono>
+#include <functional>
+#include <algorithm>
 
 namespace Yngine {
 
@@ -154,35 +155,46 @@ MCTS::MCTS(bool is_blitz, std::size_t memory_limit_bytes)
     : board_state{}
     , is_blitz{is_blitz}
     , pool{memory_limit_bytes}
-    , root{nullptr}
-    , stop_search{false} {
+    , root{nullptr} {
 }
 
 MCTS::~MCTS() {
-    this->stop_search = true;
-    if (this->search_thread.joinable()) {
+    this->stop_search();
+}
+
+void MCTS::start_search(int thread_count) {
+    // Make sure we're not running a search already @TODO: add assert
+    this->stop_search();
+    this->best_move = std::nullopt;
+
+    this->search_thread = std::jthread{std::bind_front(&MCTS::search_threaded, this), thread_count};
+}
+
+void MCTS::stop_search() {
+    if (this->is_searching()) {
+        this->search_thread.request_stop();
         this->search_thread.join();
     }
 }
 
-std::future<Move> MCTS::search(SearchLimit search_limit, int thread_count) {
-    std::packaged_task<Move(MCTS*, SearchLimit, int)> task{&MCTS::search_threaded};
-    auto future = task.get_future();
-
-    if (this->search_thread.joinable()) {
-        this->search_thread.join();
-    }
-    this->search_thread = std::thread{std::move(task), this, search_limit, thread_count};
-
-    return std::move(future);
+bool MCTS::is_searching() {
+    return this->search_thread.joinable();
 }
 
-Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
+std::optional<Move> MCTS::get_best_move() {
+    assert(!this->is_searching());
+    this->stop_search();
+
+    return this->best_move;
+}
+
+void MCTS::search_threaded(std::stop_token stoken, int thread_count) {
     // Check if we only have one move, if so return it immediatly
     MoveList moves_from_root;
     this->board_state.generate_moves(moves_from_root);
     if (moves_from_root.get_size() == 1) {
-        return moves_from_root[0];
+        this->best_move = moves_from_root[0];
+        return;
     }
 
     // Allocate root node if we haven't retained a tree from previous search
@@ -199,9 +211,16 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
     }
 
     // Start workers
-    std::vector<std::thread> workers;
+    std::vector<std::jthread> workers;
+    workers.reserve(thread_count);
+
     for (int thread_index = 0; thread_index < thread_count; thread_index++) {
-        workers.push_back(std::thread{&MCTS::search_worker, this, this->root, limit});
+        workers.push_back(std::jthread{
+            [this](std::stop_token worker_token) {
+                this->search_worker(worker_token, this->root);
+            },
+            stoken
+        });
     }
 
     // Wait for workers to finish
@@ -212,8 +231,11 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
     uint32_t most_simulations = 0;
     MCTSNode* most_simulations_node = nullptr;
 
-    // @TODO: handle case where no children of the root were created
     auto child = this->root->first_child;
+    if (!child) {
+        return;
+    }
+
     while (true) {
         const auto simulations = child->get_half_wins_and_simulations().second;
 
@@ -228,7 +250,7 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
         child = child->next_sibling;
     }
 
-    const auto best_move = most_simulations_node->parent_move;
+    const auto best_move_result = most_simulations_node->parent_move;
 
     const auto [half_wins, simulations] = most_simulations_node->get_half_wins_and_simulations();
     const auto root_simulations = this->root->get_half_wins_and_simulations().second;
@@ -239,32 +261,14 @@ Move MCTS::search_threaded(SearchLimit limit, int thread_count) {
 
     std::cout << "DEBUG: iters = " << root_simulations << ", memory used (MB) = " << (this->pool.used_bytes() / 1024 / 1024) << ", tree size = " << MCTS::tree_size(this->root) << "\n" << std::endl;
 
-    return best_move;
+    this->best_move = best_move_result;
 }
 
-void MCTS::search_worker(MCTSNode* root, SearchLimit limit) {
-    const auto start_time = std::chrono::steady_clock::now();
-
+void MCTS::search_worker(std::stop_token stoken, MCTSNode* root) {
     std::random_device rd;
     XoshiroCpp::Xoshiro256StarStar prng((static_cast<uint64_t>(rd()) << 32) | rd());
 
-    while (!this->stop_search) {
-        // Check if we exceeded the computational budget
-        if (auto* limit_iters = std::get_if<int>(&limit)) {
-            if (root->get_half_wins_and_simulations().second >= *limit_iters) {
-                break;
-            }
-        } else if (auto* limit_seconds = std::get_if<float>(&limit)) {
-            const auto elapsed = std::chrono::steady_clock::now() - start_time;
-            const auto elapsed_seconds = std::chrono::duration<float>(elapsed).count();
-
-            if (elapsed_seconds >= *limit_seconds) {
-                break;
-            }
-        } else {
-            assert(false);
-        }
-
+    while (!stoken.stop_requested()) {
         // Selection phase
         auto [selected_node, selected_board_state] = MCTS::select(root, this->board_state, this->is_blitz);
 
@@ -374,6 +378,9 @@ void MCTS::free_subtree(MCTSNode* node) {
 }
 
 void MCTS::apply_move(Move move) {
+    assert(!this->is_searching());
+    this->stop_search();
+
     this->board_state.apply_move(move, this->is_blitz ? 4 : 2);
 
     // Reuse part of the tree that we have from previous searches if possible
@@ -418,7 +425,15 @@ void MCTS::apply_move(Move move) {
 }
 
 void MCTS::set_board(BoardState board) {
+    assert(!this->is_searching());
+    this->stop_search();
+
     this->board_state = board;
+
+    // We deallocate all nodes when we change the position
+    // because of reuse, we might still have some after search
+    this->root = nullptr;
+    this->pool.clear();
 }
 
 BoardState MCTS::get_board() const {

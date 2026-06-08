@@ -6,7 +6,7 @@
 
 #include <XoshiroCpp.hpp>
 
-#include <future>
+#include <thread>
 
 namespace Yngine {
 
@@ -35,11 +35,6 @@ struct MCTSNode {
 
 class MCTS {
 public:
-    // Int limit is the amount of iterations to perform,
-    //   right now it can perform up to (thread count - 1) more iterations that specified
-    // Float limit is the amount of seconds to search for
-    using SearchLimit = std::variant<int, float>;
-
     // @TODO: move memory limit into search function?
     MCTS(bool is_blitz, std::size_t memory_limit_bytes);
     ~MCTS();
@@ -49,17 +44,22 @@ public:
     MCTS &operator=(const MCTS &) = delete;
     MCTS &operator=(MCTS &&) = delete;
 
-    std::future<Move> search(SearchLimit search_limit, int thread_count=1);
+    void start_search(int thread_count=1);
+    void stop_search();
+    bool is_searching();
+    std::optional<Move> get_best_move(); // Should only be called after stop_search()
+
     void apply_move(Move move);
     void set_board(BoardState board);
+
     BoardState get_board() const;
     MCTSNode* get_root() const;
 
     static int tree_size(MCTSNode* node);
 
 private:
-    Move search_threaded(SearchLimit limit, int thread_count);
-    void search_worker(MCTSNode* root, SearchLimit limit);
+    void search_threaded(std::stop_token stoken, int thread_count);
+    void search_worker(std::stop_token stoken, MCTSNode* root);
 
     static std::tuple<MCTSNode*, BoardState> select(MCTSNode* root, BoardState root_board_state, bool is_blitz);
     static std::tuple<MCTSNode*, BoardState> expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz);
@@ -75,8 +75,8 @@ private:
 
     MCTSNode* root;
 
-    std::atomic<bool> stop_search;
-    std::thread search_thread;
+    std::jthread search_thread;
+    std::optional<Move> best_move;
 };
 
 }
