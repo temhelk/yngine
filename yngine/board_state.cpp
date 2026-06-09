@@ -207,6 +207,10 @@ Color BoardState::whose_move() const {
     case NextAction::RingRemoval: {
         return this->ring_and_row_removal_color;
     } break;
+
+    default: {
+        abort();
+    }
     }
 }
 

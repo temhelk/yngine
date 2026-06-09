@@ -90,7 +90,7 @@ public:
     void free(T* ptr) {
         assert(ptr);
 #ifdef DEBUG
-        memset(ptr, 0, sizeof(T));
+        memset((void*)ptr, 0, sizeof(T));
 #endif
 
         Node* expected = this->last_free_node.load();
