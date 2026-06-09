@@ -153,6 +153,7 @@ float MCTSNode::compute_uct(uint32_t parent_simulations) const {
 MCTS::MCTS(bool is_blitz, std::size_t memory_limit_bytes)
     : board_state{}
     , is_blitz{is_blitz}
+    , memory_limit_bytes{memory_limit_bytes}
     , pool{memory_limit_bytes}
     , root{nullptr} {
 }
@@ -437,6 +438,10 @@ BoardState MCTS::get_board() const {
 
 MCTSNode* MCTS::get_root() const {
     return this->root;
+}
+
+size_t MCTS::get_memory_limit_bytes() const {
+    return this->memory_limit_bytes;
 }
 
 int MCTS::tree_size(MCTSNode* node) {

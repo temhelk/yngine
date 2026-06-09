@@ -71,6 +71,8 @@ public:
     BoardState get_board() const;
     MCTSNode* get_root() const;
 
+    size_t get_memory_limit_bytes() const;
+
     static int tree_size(MCTSNode* node);
 
 private:
@@ -86,6 +88,7 @@ private:
 
     BoardState board_state;
     bool is_blitz;
+    size_t memory_limit_bytes;
 
     PoolAllocator<MCTSNode> pool;
 
