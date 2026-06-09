@@ -1,10 +1,11 @@
-An game engine for Yinsh written with bitboards and Monte Carlo tree search (MCTS)
+A game engine for Yinsh written with bitboards and Monte Carlo tree search (MCTS)
 
-Can be played with using this my other project: https://github.com/temhelk/yinsh
+Can be played with using my other project: https://github.com/temhelk/yinsh
 
 Key aspects:
 - Yinsh boards are represented using 128-bit bitboards which are also used for move generation
 - For move search a parallel lock-free MCTS with UCT is used from this [paper](https://liacs.leidenuniv.nl/~plaata1/papers/paper_ICAART18.pdf)
+- Can be used for continuous (infinite) search with intermediate (while searching) search information available
 - Tree nodes are allocated with a pool allocator and tree is reused for next moves
 - ~~Tree nodes are allocated using an arena allocator, and tree is destroy and created every move search for now, but later it might use a pool allocator~~
 
