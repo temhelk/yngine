@@ -81,7 +81,7 @@ private:
 
     static std::tuple<MCTSNode*, BoardState> select(MCTSNode* root, BoardState root_board_state, bool is_blitz);
     static std::tuple<MCTSNode*, BoardState> expand(MCTSNode* node, BoardState board_state, PoolAllocator<MCTSNode>& pool, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz);
-    static GameResult playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng);
+    static GameResult playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz);
     static void backup(MCTSNode* from, GameResult playout_result);
 
     void free_subtree(MCTSNode* node);

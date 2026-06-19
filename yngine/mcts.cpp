@@ -279,7 +279,7 @@ void MCTS::search_worker(std::stop_token stoken, MCTSNode* root) {
         auto [expanded_node, expanded_board_state] = MCTS::expand(selected_node, selected_board_state, pool, prng, this->is_blitz);
 
         // Simulation phase
-        GameResult playout_result = MCTS::playout(expanded_node, expanded_board_state, prng);
+        GameResult playout_result = MCTS::playout(expanded_node, expanded_board_state, prng, this->is_blitz);
 
         // Backpropagation phase
         MCTS::backup(expanded_node, playout_result);
@@ -336,8 +336,8 @@ std::tuple<MCTSNode*, BoardState> MCTS::expand(MCTSNode* node, BoardState board_
     return std::tie(expanded_node, expanded_board_state);
 }
 
-GameResult MCTS::playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng) {
-    board_state.playout(prng);
+GameResult MCTS::playout(MCTSNode* node, BoardState board_state, XoshiroCpp::Xoshiro256StarStar& prng, bool is_blitz) {
+    board_state.playout(prng, is_blitz ? 4 : 2);
     return board_state.game_result();
 }
 
